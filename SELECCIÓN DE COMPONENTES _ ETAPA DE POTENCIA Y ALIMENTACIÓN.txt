@@ -1,0 +1,34 @@
+﻿INFORME DE SELECCIÓN DE COMPONENTES Y JUSTIFICACIÓN DE DISEÑO: ETAPA DE POTENCIA Y ALIMENTACIÓN
+1. DESCRIPCIÓN GENERAL DE LA ETAPA
+La etapa de potencia y alimentación permite estabilidad eléctrica de la tarjeta de desarrollo basada en el procesador i.MX 8M Mini. Los procesadores de aplicaciones de alta gama exigen múltiples rieles de alimentación independientes, voltajes sub-unificados de alta corriente (menores a 1V). El objetivo de esta etapa es recibir la potencia bruta de entrada, proteger el sistema contra anomalías eléctricas, y transformarla de manera eficiente y limpia para abastecer tanto el núcleo digital como los periféricos analógicos y de audio de la placa.
+
+2. DESGLOSE DETALLADO POR HOJA DE ESQUEMÁTICO Y COMPONENTES
+
+Hoja 1: 01 Entrada_y_Proteccion.SchDoc
+* ¿Qué se hizo?: Se diseñó el nodo de entrada principal de energía de la tarjeta, estableciendo el puerto de acoplamiento para la fuente externa y un circuito de protección contra anomalías eléctricas, consolidando la red segura VBUS_PROTECTED.
+* ¿Por qué se hizo así? (Justificación): Las fuentes comerciales o adaptadores de pared suelen generar picos de voltaje al conectarse o pueden sufrir inversiones de polaridad por error del usuario. Si esa energía cruda entrara directamente al procesador o al PMIC, los destruiría instantáneamente. Esta hoja actúa como un "escudo" que corta el paso ante sobrevoltajes antes de distribuir la energía al resto del sistema.
+
+Hoja 2: 02_Reguladores_Buck.SchDoc
+* ¿Qué se hizo?: Se implementaron reguladores conmutados reductores (Buck) intermedios para establecer rieles de distribución global estables como 5V_DIGITAL.
+* ¿Por qué se hizo así? (Justificación): Mientras que el PMIC se encarga exclusivamente de los voltajes milimétricos del procesador, componentes como la pantalla (GUI) o los módulos de conectividad requieren voltajes estándar fijos y alta corriente.
+* Comparación de Diseño (Conmutados vs. Lineales): 
+*  Alternativa descartada: Usar reguladores lineales tradicionales (como la familia de integrados LM7805).
+* Justificación del cambio: Un regulador lineal disipa en forma de calor puro toda la potencia sobrante (P = I . (V_in - V_out)). Al manejar corrientes altas para los periféricos, un regulador lineal elevaría la temperatura drásticamente, exigiendo disipadores gigantescos. Se utilizaron reguladores conmutados (Buck) porque su eficiencia supera el 85\%, reduciendo el desperdicio térmico y optimizando el espacio en la placa.
+
+Hoja 3: 03_Potencia_Audio.SchDoc
+* ¿Qué se hizo?: Se integró el amplificador monofónico TPA3111. Se realizó un trabajo crítico de depuración en Altium: se aisló el bloque mediante un Signal Harness (AMP_TPA311).
+* ¿Por qué se hizo así? (Justificación): El audio analógico es sumamente susceptible a captar ruido electromagnético. Separar el amplificador en su propia hoja evita que las líneas lógicas de alta velocidad contaminen el sonido. El uso de Harnesses agrupó de forma limpia los buses de control (SD, FAULT) y datos hacia la hoja principal, garantizando un proyecto estético y libre de errores eléctricos en el compilador (ERC).
+* Comparación de Componentes (Clase D vs. Clase AB):
+   * Alternativa descartada: Amplificadores analógicos tradicionales de Clase AB (como el clásico LM386 o la familia TDA2030).
+   * Justificación de la elección: Los amplificadores de Clase AB tienen una eficiencia máxima de apenas el 50%, convirtiendo la otra mitad de la energía en calor. Implementar uno para entregar 10W obligaría a añadir un disipador de aluminio sobre la PCB. El TPA3111 fue seleccionado por ser un amplificador de Clase D. Al funcionar por conmutación (PWM) a alta frecuencia, logra una eficiencia superior al 90%. Prácticamente no genera calor, lo que permite prescindir de disipadores mecánicos y reduce el espacio en la placa a un encapsulado superficial mínimo.
+
+Hoja 4: 04_PMIC_Alimentacion.SchDoc
+* ¿Qué se hizo?: Se estructuró el bloque maestro de energía alrededor del circuito integrado BD71847AMWV. Se calcularon y colocaron de manera exacta los filtros de salida LC (Inductor + Capacitor) para cuatro canales críticos de alimentación del procesador:
+   * Buck 1 (VDD_ARM_0V9): Inductor de 1uH con doble capacitor de 22 uF (Soporta corrientes altas de hasta 4A).
+   * Buck 5 (VDD_ARM_0V8): Inductor de 1uH con doble capacitor de 22uF (Hasta 3A).
+   * Buck 6 (VDD_ARM_1V1): Inductor de 1uH con capacitor de 22uF (Hasta 2A).
+   * Buck 8 (2VDD_1V8_DIGITAL): Inductor de 2.2uH con capacitor de 10uF (Hasta 1A).
+* ¿Por qué se hizo así? (Justificación): El i.MX 8M Mini exige voltajes extremadamente bajos pero corrientes instantáneas muy elevadas para realizar procesos de cómputo. El dimensionamiento en paralelo de estos capacitores disminuye la Resistencia Serie Equivalente, garantizando que el rizado de voltaje sea mínimo (menor al 1%) y protegiendo al procesador de reinicios inesperados.
+* Comparación de Componentes (PMIC Integrado vs. Fuentes Discretas):
+   * Alternativa descartada: Diseñar la fuente utilizando múltiples reguladores conmutados discretos individuales (por ejemplo, colocar seis integrados independientes tipo LM2596 o reguladores Buck separados de Texas Instruments).
+   * Justificación de la elección: Si se usaran reguladores separados, se requeriría un circuito analógico externo sumamente complejo (con microcontroladores auxiliares o líneas de retardo RC) solo para encender cada riel en el orden milimétrico que exige el fabricante. Si un solo riel se enciende antes que otro, el procesador se destruye por corrientes inversas. El BD71847AMWV fue seleccionado porque es el chip compañero (companion chip) oficial, diseñado específicamente para este procesador. Viene pre-programado por hardware de fábrica con la Secuencia de Encendido (Power-Up Sequencing) exacta, garantizando inmunidad contra fallas catastróficas y reduciendo el área requerida en la PCB en un 70%.
