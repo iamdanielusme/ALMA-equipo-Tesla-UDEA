@@ -1,0 +1,45 @@
+Este documento técnico detalla la arquitectura de hardware, la selección de componentes y las decisiones de ingeniería para el diseño del parlante inteligente ALMA. El sistema se divide estratégicamente en dos bloques principales (Hojas de Esquemático): Conectividad Inalámbrica y Procesamiento de Audio, optimizando la integridad de la señal, el consumo energético y la seguridad por hardware.
+ 1. Hoja de Conectividad Inalámbrica (Control y Radiofrecuencia)
+Esta sección gestiona la comunicación de alta velocidad, el almacenamiento de firmware local y el acoplamiento de impedancias para la transmisión inalámbrica.
+Módulo Principal: Murata LBEE5KL1DX-883
+•	Qué es: Un transceptor ultra-compacto basado en el chipset Infineon/Cypress CYW4343W.
+•	Por qué se eligió: Integra conectividad Wi-Fi 802.11 b/g/n y Bluetooth 5.1 BR/EDR/LE en un solo empaque. Al estar pre-certificado, reduce drásticamente los riesgos de conformidad electromagnética (FCC/CE). Su arquitectura permite separar el tráfico de datos del procesador central mediante interfaces dedicadas (SDIO para Wi-Fi y UART para Bluetooth).
+Memoria Flash NOR: Winbond W25Q128JVS
+•	Qué es: Memoria no volátil de 128 Mbits (16 MB) con interfaz SPI.
+•	Por qué se eligió: El módulo de conectividad requiere cargar parches de firmware y tablas de configuración de radio en cada ciclo de encendido. La W25Q128JVS ofrece tiempos de acceso de lectura ultra-rápidos en modo Quad-SPI.
+•	Detalle técnico: Se incluyeron resistencias de pull-up de 10  (R6, R7, R8) en las líneas de control /CS, HOLD y WP para evitar estados lógicos flotantes e indeterminados durante el arranque del sistema, protegiendo la memoria de escrituras corruptas.
+Filtro de Banda Pasante y Conector de Antena
+•	Componentes: Filtro Johanson Technology 2450BP15C0100E y conector U.FL-R-SMT(10).
+•	Por qué se eligieron: El filtro de banda pasante cerámico está centrado en 2.45 GHz con una impedancia nominal de 50 Oms. Su función es suprimir los armónicos no deseados producidos por la conmutación de la etapa de radio y bloquear interferencias de otras bandas de frecuencia. El conector miniatura U.FL permite acoplar una antena externa de alta ganancia, garantizando una excelente cobertura dentro de la carcasa del dispositivo.
+
+Sistema de Reloj (Crystal Oscillator)
+•	Componente: Cristal de cuarzo Abracon ABS07-120-32.768KHZ-T.
+•	Por qué se eligió: Proporciona la señal de reloj externa de baja frecuencia para el oscilador de bajo consumo (LPO) del módulo inalámbrico. Es vital para mantener sincronizados los modos de suspensión (Sleep Modes) de Bluetooth y Wi-Fi sin necesidad de encender el oscilador principal de alta frecuencia, optimizando drásticamente el consumo de batería. Los capacitores C5 y C6 de 12 pF estabilizan la resonancia del cristal según la carga requerida por el fabricante.
+2. Hoja de Procesamiento de Audio (Captura y Amplificación)
+Este bloque se encarga de la digitalización de la voz, el enrutamiento de datos musicales, el filtrado de ruido y la amplificación de potencia para el parlante.
+Códec de Audio Principal: Texas Instruments TLV320AIC3104IRHBT
+•	Qué es: Un códec de audio estéreo de bajo consumo con ADC y DAC integrados de 24 bits.
+•	Por qué se eligió: Actúa como el cerebro analógico/digital del sistema de audio. Permite recibir la voz digitalizada de los micrófonos mediante el bus I2S, procesarla y, simultáneamente, convertir la música digital proveniente del módulo Bluetooth en una señal analógica diferencial diferencial (LEFT_LOP / LEFT_LOM) de muy baja distorsión armónica.
+Sistema de Mute y Privacidad por Hardware
+•	Componentes: Interruptor mecánico deslizable C&K JS202011JCQN y resistencia de pull-down R1 de 10 k.
+•	Por qué se eligió: Para cumplir con estrictos estándares de privacidad, el corte de los micrófonos se realiza a nivel físico (Hardware-level) y no por software (donde un malware podría activarlos).
+•	Detalle técnico: Cuando el switch se abre, desconecta la línea principal de energía VCC. Inmediatamente, la resistencia R1 drena cualquier carga residual atrapada en los capacitores internos de los micrófonos directamente a tierra (GND), forzando un estado de 0V absolutos en la red VCC_MICS de forma instantánea.
+Micrófonos MEMS Digitales: InvenSense/TDK ICS-43434
+•	Qué es: Micrófonos con salida digital directa en formato I2S.
+•	Por qué se eligieron: A diferencia de los micrófonos analógicos, los micrófonos digitales MEMS poseen una inmunidad excepcional al ruido electromagnético. Esto es crítico en el parlante ALMA, ya que coexisten muy cerca de las ráfagas de RF de 2.4GHz generadas por el Wi-Fi. Al transmitir datos digitales a través de las líneas SD (Serial Data), SCK (Clock) y WS (Word Select), se elimina la necesidad de preamplificadores analógicos y cables blindados propensos a captar zumbidos.
+•	Configuración Estéreo: Se configuraron en par estéreo compartiendo el mismo bus físico. El micro1 (Canal Izquierdo) tiene su pin LR conectado a GND, mientras que el micro2 (Canal Derecho) tiene su pin LR conectado a VCC_MICS.
+Amplificador de Potencia: Texas Instruments TPA3118D2DAPR
+•	Qué es: Amplificador de audio de alta eficiencia Clase D de hasta 30W.
+•	Por qué se eligió: La tecnología de Clase D opera mediante modulación por ancho de pulsos (PWM), ofreciendo una eficiencia superior al 90%. Esto significa que prácticamente toda la energía de la fuente se transforma en sonido y muy poca se disipa en forma de calor, eliminando la necesidad de un disipador de calor grande y pesado. Se alimenta a través de la línea de potencia VCC5V0 para garantizar un volumen elevado y con cuerpo en el parlante.
+•	Detalles de protección y acoplamiento:
+o	Los capacitores C1 y C2 de 1microF en serie con las entradas LINP y LINN actúan como filtros de acoplamiento de AC. Su función es bloquear cualquier voltaje de offset de corriente directa (DC) remanente del Códec, dejando pasar únicamente la señal pura de audio para evitar daños térmicos en el chip.
+o	El pin de apagado /SDZ se amarra a VCC a través de una resistencia de pull-up de 10k (R2) para mantener el chip siempre activo por defecto, permitiendo que el procesador lo controle en el futuro si se desea. El pin MUTE se conecta firmemente a GND para deshabilitar el silenciado interno permanente del chip.
+Conector de Salida del Parlante: JST S2B-PH-K-S(LF)(SN)
+•	Qué es: Conector macho de dos pines con paso de 2.0 mm de JST.
+•	Por qué se eligió: Ofrece un sistema de bloqueo mecánico robusto y seguro. Las vibraciones acústicas de baja frecuencia generadas por el propio parlante dentro de la caja podrían desconectar cables de presión comunes. El JST PH garantiza un contacto eléctrico perfecto bajo vibración constante para las líneas de salida de potencia OUTPL y OUTNL.
+3. Justificación de Buses e Interfaces de Comunicación
+Para interconectar estas dos hojas de esquemáticos de forma limpia y escalable se estructuraron cuatro buses jerárquicos independientes utilizando la herramienta Harness de Altium Designer:
+1.	AUDIO_I2S_BUS (Puente Inter-hojas): Cruza de la hoja de conectividad a la de audio. Transporta de forma síncrona las señales digitales de sonido (BT_PCM_CLK, BT_PCM_SYNC, BT_PCM_IN, BT_PCM_OUT). Es la autopista que vincula el receptor Bluetooth con el Códec.
+2.	HARNESS_SDIO_WIFI: Interfaz nativa de alta velocidad que conecta los pines de control y los 4 bits de datos del Wi-Fi del módulo Murata hacia el SoC central. Incluye resistencias de pull-up para asegurar la estabilidad en ráfagas de datos masivos.
+3.	HARNESS_UART_BT: Interfaz de 4 hilos (TX, RX, CTS, RTS) dedicada exclusivamente al envío de comandos de control AT y sincronización entre el microcontrolador central y el controlador de Bluetooth.
+4.	HARNESS_SPI_FLASH: Aísla las líneas de alta frecuencia de la memoria NOR Flash (CLK, MOSI, MISO, CS), reduciendo el ruido cruzado (Crosstalk) con las líneas analógicas sensibles del bloque de audio.
